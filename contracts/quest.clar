@@ -28,6 +28,35 @@
                 achievements: (list u0 u0 u0 u0 u0)
             }
         ))
+
+;; Quest System
+(define-public (start-quest (quest-id uint))
+    (let (
+        (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
+        (current-level (get level player-data))
+    )
+        (asserts! (>= current-level u3) ERR-INVALID-PARAMS)
+        (ok (gain-experience u20))
+    ))
+
+;; Player Leveling
+(define-public (level-up)
+    (let (
+        (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
+        (current-exp (get experience player-data))
+        (current-level (get level player-data))
+    )
+        (asserts! (>= current-exp (* current-level u100)) ERR-INVALID-PARAMS)
+        (ok (map-set players 
+            tx-sender
+            (merge player-data
+                { 
+                    level: (+ current-level u1),
+                    experience: u0
+                }
+            )
+        ))
+    ))
     )
 )
 
