@@ -15,6 +15,13 @@
 
 (define-non-fungible-token game-item uint)
 
+(define-map market-listings
+    uint
+    {
+        price: uint,
+        seller: principal
+    })
+
 ;; Constants
 (define-constant ERR-NOT-ADMIN (err u100))
 (define-constant ERR-NOT-FOUND (err u101))
@@ -31,6 +38,33 @@
                 inventory: (list u0 u0 u0 u0 u0 u0 u0 u0 u0 u0),
                 achievements: (list u0 u0 u0 u0 u0)
             }
+        ))
+    )
+)
+
+;; Crafting System
+(define-public (craft-item (recipe-id uint) (ingredient-1 uint) (ingredient-2 uint) (ingredient-3 uint))
+    (let (
+        (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
+    )
+        (begin 
+            (try! (nft-transfer? game-item ingredient-1 tx-sender (var-get admin)))
+            (try! (nft-transfer? game-item ingredient-2 tx-sender (var-get admin)))
+            (try! (nft-transfer? game-item ingredient-3 tx-sender (var-get admin)))
+            (mint-item recipe-id tx-sender)
+        )
+    )
+)
+
+;; Marketplace System
+(define-public (list-item-for-sale (item-id uint) (price uint))
+    (let (
+        (owner (unwrap! (nft-get-owner? game-item item-id) ERR-NOT-FOUND))
+    )
+        (asserts! (is-eq tx-sender owner) ERR-NOT-ADMIN)
+        (ok (map-set market-listings
+            item-id
+            { price: price, seller: tx-sender }
         ))
     )
 )
