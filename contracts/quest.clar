@@ -1,8 +1,24 @@
 ;; StackQuest Game Contract
 
-;; Data Variables and Maps
-(define-data-var admin principal tx-sender)
+;; Constants
+(define-constant ERR-NOT-ADMIN (err u100))
+(define-constant ERR-NOT-FOUND (err u101))
+(define-constant ERR-INVALID-PARAMS (err u102))
+(define-constant ERR-UNAUTHORIZED (err u103))
+(define-constant ERR-INVALID-PRICE (err u104))
+(define-constant ERR-INVALID-LEVEL (err u105))
+(define-constant ERR-INVALID-TEAM (err u106))
 
+;; Data Variables
+(define-data-var admin principal tx-sender)
+(define-data-var min-price uint u1)
+(define-data-var max-price uint u1000000000)
+(define-data-var max-level uint u100)
+
+;; Non-Fungible Token Definition
+(define-non-fungible-token game-item uint)
+
+;; Maps
 (define-map players 
     principal 
     {
@@ -13,23 +29,58 @@
     }
 )
 
-(define-non-fungible-token game-item uint)
+(define-map teams 
+    uint 
+    { 
+        leader: principal,
+        members: (list 4 principal)
+    }
+)
 
 (define-map market-listings
     uint
     {
         price: uint,
-        seller: principal
-    })
+        seller: principal,
+        active: bool
+    }
+)
 
-;; Constants
-(define-constant ERR-NOT-ADMIN (err u100))
-(define-constant ERR-NOT-FOUND (err u101))
-(define-constant ERR-INVALID-PARAMS (err u102))
+;; Private Functions
+(define-private (validate-price (price uint))
+    (and (>= price (var-get min-price))
+         (<= price (var-get max-price)))
+)
+
+(define-private (validate-level (level uint))
+    (<= level (var-get max-level))
+)
+
+(define-private (is-valid-item (item-id uint))
+    (is-some (nft-get-owner? game-item item-id))
+)
+
+(define-private (own-item (item-id uint))
+    (is-eq (some tx-sender) (nft-get-owner? game-item item-id))
+)
+
+;; Read-Only Functions
+(define-read-only (get-player-data (player principal))
+    (map-get? players player)
+)
+
+(define-read-only (get-team-data (team-id uint))
+    (map-get? teams team-id)
+)
+
+(define-read-only (get-market-listing (item-id uint))
+    (map-get? market-listings item-id)
+)
 
 ;; Player Management
 (define-public (register-player)
-    (begin 
+    (begin
+        (asserts! (is-none (map-get? players tx-sender)) ERR-INVALID-PARAMS)
         (ok (map-set players 
             tx-sender
             {
@@ -42,30 +93,54 @@
     )
 )
 
-;; Crafting System
-(define-public (craft-item (recipe-id uint) (ingredient-1 uint) (ingredient-2 uint) (ingredient-3 uint))
-    (let (
-        (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
-    )
-        (begin 
-            (try! (nft-transfer? game-item ingredient-1 tx-sender (var-get admin)))
-            (try! (nft-transfer? game-item ingredient-2 tx-sender (var-get admin)))
-            (try! (nft-transfer? game-item ingredient-3 tx-sender (var-get admin)))
-            (mint-item recipe-id tx-sender)
-        )
+;; Team System
+(define-public (create-team (team-id uint))
+    (begin
+        (asserts! (is-none (map-get? teams team-id)) ERR-INVALID-TEAM)
+        (asserts! (is-some (map-get? players tx-sender)) ERR-NOT-FOUND)
+        (ok (map-set teams 
+            team-id 
+            {
+                leader: tx-sender,
+                members: (list tx-sender tx-sender tx-sender tx-sender)
+            }
+        ))
     )
 )
 
 ;; Marketplace System
 (define-public (list-item-for-sale (item-id uint) (price uint))
-    (let (
-        (owner (unwrap! (nft-get-owner? game-item item-id) ERR-NOT-FOUND))
-    )
-        (asserts! (is-eq tx-sender owner) ERR-NOT-ADMIN)
+    (begin
+        (asserts! (validate-price price) ERR-INVALID-PRICE)
+        (asserts! (own-item item-id) ERR-UNAUTHORIZED)
+        (asserts! (is-valid-item item-id) ERR-NOT-FOUND)
         (ok (map-set market-listings
             item-id
-            { price: price, seller: tx-sender }
+            { 
+                price: price, 
+                seller: tx-sender,
+                active: true 
+            }
         ))
+    )
+)
+
+(define-public (buy-item (item-id uint))
+    (let (
+        (listing (unwrap! (map-get? market-listings item-id) ERR-NOT-FOUND))
+        (price (get price listing))
+        (seller (get seller listing))
+        (active (get active listing))
+    )
+        (begin
+            (asserts! active ERR-NOT-FOUND)
+            (asserts! (is-valid-item item-id) ERR-NOT-FOUND)
+            (try! (stx-transfer? price tx-sender seller))
+            (try! (nft-transfer? game-item item-id seller tx-sender))
+            (map-set market-listings item-id
+                (merge listing { active: false }))
+            (ok true)
+        )
     )
 )
 
@@ -73,6 +148,8 @@
 (define-public (mint-item (item-id uint) (recipient principal))
     (begin
         (asserts! (is-eq tx-sender (var-get admin)) ERR-NOT-ADMIN)
+        (asserts! (is-some (map-get? players recipient)) ERR-NOT-FOUND)
+        (asserts! (not (is-valid-item item-id)) ERR-INVALID-PARAMS)
         (nft-mint? game-item item-id recipient)
     )
 )
@@ -91,83 +168,35 @@
     )
 )
 
-;; Achievement System
-(define-public (unlock-achievement (achievement-id uint))
-    (let (
-        (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
-        (current-achievements (get achievements player-data))
-    )
-        (ok (map-set players
-            tx-sender
-            (merge player-data
-                { achievements: (unwrap! (as-max-len? 
-                    (append current-achievements achievement-id) u5) 
-                    ERR-INVALID-PARAMS) }
-            )
-        ))
-    )
-)
-
-;; Rewards System
-(define-public (claim-reward (achievement-id uint))
-    (let (
-        (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
-        (achievements (get achievements player-data))
-    )
-        (asserts! (is-some (index-of achievements achievement-id)) ERR-NOT-FOUND)
-        (mint-item achievement-id tx-sender)
-    )
-)
-
-;; Battle System
-(define-public (initiate-battle (opponent principal))
-    (let (
-        (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
-        (opponent-data (unwrap! (map-get? players opponent) ERR-NOT-FOUND))
-        (player-level (get level player-data))
-        (opponent-level (get level opponent-data))
-    )
-        (if (>= player-level opponent-level)
-            (gain-experience u10)
-            (ok true))
-    )
-)
-
-;; Item Trading
-(define-public (trade-item (item-id uint) (recipient principal))
-    (begin
-        (asserts! (is-eq (nft-get-owner? game-item item-id) (some tx-sender)) ERR-NOT-FOUND)
-        (nft-transfer? game-item item-id tx-sender recipient)
-    )
-)
-
-;; Quest System
-(define-public (start-quest (quest-id uint))
-    (let (
-        (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
-        (current-level (get level player-data))
-    )
-        (asserts! (>= current-level u3) ERR-INVALID-PARAMS)
-        (gain-experience u20)
-    )
-)
-
-;; Player Leveling
+;; Level System
 (define-public (level-up)
     (let (
         (player-data (unwrap! (map-get? players tx-sender) ERR-NOT-FOUND))
         (current-exp (get experience player-data))
         (current-level (get level player-data))
+        (next-level (+ current-level u1))
     )
-        (asserts! (>= current-exp (* current-level u100)) ERR-INVALID-PARAMS)
-        (ok (map-set players 
-            tx-sender
-            (merge player-data
-                { 
-                    level: (+ current-level u1),
-                    experience: u0
-                }
-            )
-        ))
+        (begin
+            (asserts! (validate-level next-level) ERR-INVALID-LEVEL)
+            (asserts! (>= current-exp (* current-level u100)) ERR-INVALID-PARAMS)
+            (ok (map-set players 
+                tx-sender
+                (merge player-data
+                    { 
+                        level: next-level,
+                        experience: u0
+                    }
+                )
+            ))
+        )
+    )
+)
+
+;; Admin Functions
+(define-public (set-admin (new-admin principal))
+    (begin
+        (asserts! (is-eq tx-sender (var-get admin)) ERR-NOT-ADMIN)
+        (asserts! (not (is-eq new-admin (var-get admin))) ERR-INVALID-PARAMS)
+        (ok (var-set admin new-admin))
     )
 )

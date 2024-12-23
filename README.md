@@ -1,28 +1,45 @@
 # StackQuest
 
-A blockchain-based RPG game built on the Stacks ecosystem where players can earn NFTs and Bitcoin rewards through gameplay achievements.
+A secure blockchain-based RPG game built on the Stacks ecosystem featuring NFT-based items and Bitcoin rewards.
 
-## Features
+## Core Features
 
-- Player registration and progression system
-- NFT-based inventory system
-- Achievement tracking
-- Bitcoin-based rewards system
-- Turn-based gameplay mechanics
+- Player progression with experience and leveling
+- NFT-based inventory management
+- Secure marketplace for item trading
+- Team-based gameplay mechanics
+- Achievement system with rewards
+- Price-controlled marketplace
+- Automated safety checks
 
 ## Smart Contract Functions
 
-### Player Management
-- `register-player`: Creates a new player profile
-- `gain-experience`: Awards experience points to players
+### Player System
+- `register-player`: Creates player profile with initial stats
+- `gain-experience`: Awards XP with automated level checks
+- `level-up`: Promotes players based on XP thresholds
 
-### Items and Rewards
-- `mint-item`: Creates new game items as NFTs
-- `claim-reward`: Allows players to claim rewards for achievements
+### Market System
+- `list-item-for-sale`: Lists NFT items with price validation
+- `buy-item`: Processes secure marketplace transactions
+- `get-market-listing`: Retrieves active listing details
 
-### Achievement System
-- `unlock-achievement`: Records player achievements
-- Track multiple achievements per player
+### Team Mechanics
+- `create-team`: Forms player teams with leadership
+- `get-team-data`: Retrieves team composition
+
+### Administration
+- `set-admin`: Secure admin transfer with validation
+- `mint-item`: Creates game items with ownership verification
+
+## Security Features
+
+- Price boundaries for market stability
+- Level caps and progression controls
+- Ownership verification for all item operations
+- Active listing status tracking
+- Admin operation safeguards
+- Input validation across all functions
 
 ## Development Setup
 
@@ -31,27 +48,33 @@ A blockchain-based RPG game built on the Stacks ecosystem where players can earn
 curl -L https://install.clarinet.sh | sh
 ```
 
-2. Initialize project
+2. Setup Project
 ```bash
 clarinet new stackquest
 cd stackquest
 ```
 
-3. Deploy contract
+3. Deploy Contract
 ```bash
-clarinet contract:deploy stackquest
+clarinet contract:deploy
 ```
 
 ## Testing
 
-Run the test suite:
+Execute test suite:
 ```bash
 clarinet test
 ```
 
-## Security Considerations
+## Future Enhancements
 
-- Admin-only functions are protected
-- Built-in error handling for invalid operations
-- Strict inventory and achievement limits
-- Non-fungible token standards compliance
+- Battle system integration
+- Crafting mechanics
+- Quest system
+- Enhanced team features
+
+## Contributing
+
+1. Fork repository
+2. Create feature branch
+3. Submit pull request with tests
